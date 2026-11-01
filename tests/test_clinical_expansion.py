@@ -19,7 +19,7 @@ class ExpandedBackendTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        self.db = ClinicDatabase(Path(temp.name) / "synthetic.db")
+        self.db = ClinicDatabase(Path(temp.name) / "synthetic.db", allow_insecure_plaintext_for_tests=True)
         self.db.initialize()
         self.patient = PatientService(self.db).create("Synthetic Alice", date(1992, 7, 5))
         self.other = PatientService(self.db).create("Synthetic Bob")
@@ -172,7 +172,7 @@ class ExpandedBackendTests(unittest.TestCase):
         from dental_clinic.db import SCHEMA_V1
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "legacy.sqlite3"
-            old = ClinicDatabase(path)
+            old = ClinicDatabase(path, allow_insecure_plaintext_for_tests=True)
             with old.transaction() as c:
                 for ddl in SCHEMA_V1:
                     c.execute(ddl)
@@ -196,7 +196,7 @@ class AdditionalIntegrationTests(unittest.TestCase):
         from dental_clinic.reporting import ReportingService
         from dental_clinic.services import AppointmentService, ClinicRoomService
         with tempfile.TemporaryDirectory() as tmp:
-            db = ClinicDatabase(Path(tmp) / 'test.db')
+            db = ClinicDatabase(Path(tmp) / 'test.db', allow_insecure_plaintext_for_tests=True)
             db.initialize()
             patients = PatientService(db)
             first = patients.create('Synthetic First')

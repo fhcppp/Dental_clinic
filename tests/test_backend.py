@@ -27,7 +27,7 @@ class BackendIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.db = ClinicDatabase(Path(self.temp.name) / "test.sqlite3")
+        self.db = ClinicDatabase(Path(self.temp.name) / "test.sqlite3", allow_insecure_plaintext_for_tests=True)
         self.db.initialize()
         self.patients = PatientService(self.db)
         self.appointments = AppointmentService(self.db)

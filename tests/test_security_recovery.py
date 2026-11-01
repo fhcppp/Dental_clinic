@@ -16,7 +16,7 @@ class SecureInfrastructureTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.folder = Path(tmp.name)
-        self.db = ClinicDatabase(self.folder / "clinic.sqlite3")
+        self.db = ClinicDatabase(self.folder / "clinic.sqlite3", allow_insecure_plaintext_for_tests=True)
         self.db.initialize()
         self.p = PatientService(self.db).create("Synthetic Privacy Case")
         self.other = PatientService(self.db).create("Synthetic Other")
@@ -100,7 +100,7 @@ class SecureInfrastructureTests(unittest.TestCase):
         files = self.folder / "restored_attachments"
         service.restore_to(backup, "strong-synthetic-archive-password",
                            destination_db=database, destination_attachments=files)
-        restored = ClinicDatabase(database)
+        restored = ClinicDatabase(database, allow_insecure_plaintext_for_tests=True)
         self.assertEqual(PatientService(restored).get(self.p.id).full_name,
                          "Synthetic Privacy Case")
         self.assertEqual(AttachmentVault(restored, files, self.key).load(self.p.id, att), original)

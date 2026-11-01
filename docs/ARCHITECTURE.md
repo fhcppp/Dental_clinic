@@ -7,3 +7,11 @@ The database is **not encrypted at rest**. Attachment contents and backup archiv
 The old SQLite v1 schema upgrades additively to v2 in one atomic migration system. Future schema changes must add new numbered migrations, not silently edit migrations already deployed. The requested SQLAlchemy 2.x layered architecture is **not yet implemented**. Avoid introducing a competing Alembic migration system without a carefully tested conversion plan.
 
 See `BACKEND_COMPLETION_REPORT.md` for details and limitations.
+
+## Phase 1 architecture update
+
+A standalone clinic settings object and `security/keys.py` isolate settings validation and encryption-envelope primitives. Standard sqlite3 services remain mixed with SQL statements; persistence boundary extraction is still outstanding. `ClinicDatabase` disallows production startup instead of opening plaintext data. See ADRs 0005–0007.
+
+### Recovered-code integration provenance
+
+This integration adds no competing migration system or new service rewrite. The verified upstream v1→v2 tree and the reconstructed baseline tree are byte-identical at the Git tree level. The Phase 1 additions and intentional test-only SQLite opt-in are catalogued in [`INTEGRATION_CHANGELOG.md`](INTEGRATION_CHANGELOG.md). Full persistence-layer separation and authenticated service authorization remain unfinished.

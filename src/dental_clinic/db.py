@@ -4,10 +4,13 @@ IMPORTANT: SQLite is not encrypted at rest here. Use synthetic data only until
 production authentication, authorization, and encryption are implemented.
 """
 
+import os
 import sqlite3
+import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from uuid import uuid4
 
 SCHEMA_VERSION = 2
 SCHEMA_V1 = (
@@ -284,10 +287,56 @@ SCHEMA_V2 = (
 class ClinicDatabase:
     """Open one SQLite connection per operation, safe for multi-threaded callers."""
 
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, *, allow_insecure_plaintext_for_tests: bool = False):
+        """Fail closed unless plaintext storage is explicitly enabled for tests.
+
+        A production-ready SQLCipher backend is not implemented. This safeguard
+        prevents mistakenly opening clinical data with standard sqlite3.
+        """
         self.path = str(path)
+        self.allow_insecure_plaintext_for_tests = allow_insecure_plaintext_for_tests
+
+    def _require_safe_mode(self) -> None:
+        if not self.allow_insecure_plaintext_for_tests:
+            raise RuntimeError(
+                "Database encryption is unavailable: production startup denied. "
+                "For synthetic test data only, explicitly pass "
+                "allow_insecure_plaintext_for_tests=True."
+            )
+
+    def _backup_before_migration(self) -> Path | None:
+        """Create a consistent verified SQLite snapshot before existing-db DDL.
+
+        This does not replace the transaction; failure still rolls back the
+        original and the snapshot is intentionally retained for recovery.
+        """
+        location = Path(self.path)
+        if not location.is_file():
+            return None
+        with self.read() as source:
+            version = int(source.execute("PRAGMA user_version").fetchone()[0])
+            if not 0 < version < SCHEMA_VERSION:
+                return None
+            destination = location.with_name(
+                f"{location.name}.before-schema-{version}-{uuid4().hex}.sqlite3"
+            )
+            fd, temp_name = tempfile.mkstemp(prefix=".migration-", suffix=".sqlite3",
+                                              dir=location.parent)
+            os.close(fd)
+            try:
+                with sqlite3.connect(temp_name) as target:
+                    source.backup(target)
+                    if target.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                        raise RuntimeError("Pre-migration backup integrity failure")
+                    if int(target.execute("PRAGMA user_version").fetchone()[0]) != version:
+                        raise RuntimeError("Pre-migration backup schema mismatch")
+                os.replace(temp_name, destination)
+            finally:
+                Path(temp_name).unlink(missing_ok=True)
+            return destination
 
     def connect(self) -> sqlite3.Connection:
+        self._require_safe_mode()
         conn = sqlite3.connect(self.path, timeout=5, isolation_level=None)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
@@ -296,6 +345,8 @@ class ClinicDatabase:
 
     def initialize(self) -> None:
         """Apply schema v1 once; refuse to open schemas from a newer version."""
+        self._require_safe_mode()
+        self._backup_before_migration()
         with self.transaction() as conn:
             version = int(conn.execute("PRAGMA user_version").fetchone()[0])
             if version > SCHEMA_VERSION:

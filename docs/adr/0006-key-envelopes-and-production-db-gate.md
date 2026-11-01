@@ -1,0 +1,13 @@
+# ADR 0006 — Envelope keys, independent recovery and fail-closed SQLite
+
+Status: Partially implemented / Windows UNVERIFIED. Date: 2026-11-01.
+
+Production database opens must fail closed unless the database is genuinely encrypted. `ClinicDatabase` rejects normal startup. The only allowed plaintext mechanism in this milestone is the explicitly named `allow_insecure_plaintext_for_tests=True`; the setting must never be shipped for real records. The current Python sqlite3 backend remains plaintext in this mode, and SQLCipher has not been integrated. SQLCipher binding installation and native Windows DLL distribution are UNVERIFIED. `docs/windows_verification/verify_windows.py` documents native preflight steps.
+
+**Key generation:** a 32-byte master key from `secrets.token_bytes` wraps three independently generated 32-byte data-encryption keys: database, attachments and backups. AES-256-GCM uses random 96-bit nonces and purpose/key-version-bound AAD. The keyring contains `format`, `envelope_version`, `key_version`, `wrap_cipher`, and individually authenticated ciphertext envelopes; it contains no plaintext keys. Actual database/attachment/backup service integration with these keys is pending.
+
+**Master key protection:** `WindowsDPAPIKeyProvider` stores only Windows DPAPI-protected key blobs; real Windows behavior is UNVERIFIED. TestOnlyKeyProvider refuses production usage. Keyring files must be written with private create-only permissions and may never overwrite another envelope silently.
+
+**Independent recovery:** the recovery password (12+ characters) uses scrypt with fixed `N=32768, r=8, p=1`, per-envelope random 128-bit salt, AES-256-GCM random 96-bit nonce and authenticated ciphertext of the master key. The self-describing versioned envelope records algorithm IDs and KDF parameters but **never** the password. Recovery can execute on a different machine with the recovery envelope and password, without DPAPI. Verify password recovery independently *before* trusting any backup. The recovery envelope must be stored separately from encrypted backups.
+
+**Rotation:** increment key_version, generate new independent data keys, re-encrypt records/backups or migrate them with an explicit old-version to new-version map, and atomically replace protected envelopes after validation. Rotation and cross-version restoration are NOT IMPLEMENTED. **Lost keys:** if both the DPAPI-protected master key and its recoverable password envelope cannot be unlocked, the encrypted data is not recoverable. Emergency plaintext fallback is forbidden. Backup archives do not constitute recovery of keys.

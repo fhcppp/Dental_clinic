@@ -14,3 +14,7 @@
 - Patient deletion is restricted by existing history foreign keys; archival uses active status.
 
 All migrations are carried out transactionally by `ClinicDatabase.initialize()` and preserve v1 identifiers. Schema v2 is additive, but not yet a fully constrained production-grade clinical schema. The SQLite DB is **plaintext**. `PRAGMA foreign_keys=ON` is set per connection.
+
+## Migration preflight update
+
+Before upgrading an existing schema, the database now creates a transactionally consistent SQLite-online-backup snapshot with a unique `before-schema` suffix, verifies integrity and schema version, and then migrates via existing `PRAGMA user_version` and `BEGIN IMMEDIATE`. An injected invalid migration was tested to roll back with original version and patient identifier intact. Snapshots in the current explicit test-only mode are **plaintext** and must contain synthetic data only.

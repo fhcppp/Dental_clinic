@@ -1,3 +1,5 @@
+> **Update 2026-11-01:** Phase 0 completed; Phase 1 partially implemented. The latest acceptance statuses and evidence are in [`BACKEND_ACCEPTANCE_REPORT.md`](BACKEND_ACCEPTANCE_REPORT.md). Local `unittest` and `pytest` each pass **50 tests** after the fail-closed database gate, pre-migration backup and key envelope work. No fresh GitHub CI run or real Windows check is claimed. Backend remains **NOT PRODUCTION-READY**.
+
 # Backend progress and completion gate (2026-11-01)
 
 **Status: PARTIAL, NOT PRODUCTION-READY.** This document reports a real backend milestone, not a completion certificate. The uploaded backend-completion mission has stricter requirements than the current code meets.
@@ -54,3 +56,7 @@ On the authoring environment, `PYTHONPATH=src python -m unittest discover -s tes
 8. **Code quality.** Current data access uses `sqlite3`, not requested SQLAlchemy 2.x; no dedicated DTO layer; type checks and complete security penetration tests remain outstanding.
 
 The backend-completion gate must remain **not passed** until these blockers and the complete mission test matrix are resolved.
+
+## Remote integration provenance — 2026-11-01
+
+The recovered Phase 1 changes were compared with the actual upstream source using Git tree identity, not presumed Git ancestry. See [`INTEGRATION_CHANGELOG.md`](INTEGRATION_CHANGELOG.md). Local integration verification: Python 3.13.5; 50 unittest tests passing, 50 pytest tests passing (plus 9 subtests), compilation and Git whitespace checks passing. Local Ruff/mypy and real Windows/DPAPI/SQLCipher checks were not performed. Backend completion remains **NOT PASSED**.
