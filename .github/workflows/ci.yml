@@ -1,0 +1,32 @@
+name: Python backend CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+concurrency:
+  group: backend-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install project and development checks
+        run: python -m pip install -e '.[dev]'
+      - name: Ruff
+        run: ruff check .
+      - name: Type check
+        run: mypy src/dental_clinic --ignore-missing-imports
+      - name: Temporary-SQLite integration tests
+        run: python -m unittest discover -s tests -v
+      - name: Compile
+        run: python -m compileall -q src tests
