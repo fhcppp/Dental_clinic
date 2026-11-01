@@ -47,7 +47,7 @@ def money_minor(amount: Decimal | str) -> int:
         value = Decimal(amount)
     except (InvalidOperation, ValueError, TypeError) as exc:
         raise ValidationError("Invalid monetary amount") from exc
-    if not value.is_finite() or value < 0 or value.as_tuple().exponent < -2:
+    if not value.is_finite() or value < 0 or value * 100 != (value * 100).to_integral_value():
         raise ValidationError("Amount must be nonnegative with at most two decimals")
     minor = value * 100
     if minor > 9_000_000_000_000_000:
