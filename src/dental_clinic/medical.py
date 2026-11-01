@@ -6,7 +6,7 @@ must replace caller-supplied actor_id before use with real patient data.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from uuid import uuid4
 
 from .db import ClinicDatabase

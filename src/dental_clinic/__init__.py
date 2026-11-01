@@ -1,15 +1,15 @@
 """Local-first dental clinic backend foundation (not for clinical production)."""
 
-from .db import ClinicDatabase
-from .auth import AuthService
 from .attachments import AttachmentVault
+from .auth import AuthService
 from .backup import BackupService
 from .clinical import ClinicalService
+from .db import ClinicDatabase
+from .errors import ConflictError, NotFoundError, ValidationError
 from .finance import FinanceService
 from .medical import MedicalService
 from .reporting import ReportingService
-from .errors import ConflictError, NotFoundError, ValidationError
-from .services import AppointmentService, OdontogramService, PatientService, ClinicRoomService
+from .services import AppointmentService, ClinicRoomService, OdontogramService, PatientService
 
 __all__ = [
     "ClinicDatabase",

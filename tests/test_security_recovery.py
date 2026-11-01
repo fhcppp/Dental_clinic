@@ -1,6 +1,5 @@
 """Synthetic attachment, session, and recovery tests; no live data."""
 import os
-import sqlite3
 import tempfile
 import unittest
 from pathlib import Path

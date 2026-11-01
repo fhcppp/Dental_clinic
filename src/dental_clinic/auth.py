@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 from argon2 import PasswordHasher, Type

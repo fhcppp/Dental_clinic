@@ -6,7 +6,6 @@ Clinical records are append-only once finalized; amendments are new records.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 

@@ -192,8 +192,9 @@ if __name__ == "__main__":
 class AdditionalIntegrationTests(unittest.TestCase):
     def test_room_collision_and_reporting(self):
         from datetime import UTC, datetime, timedelta
-        from dental_clinic.services import AppointmentService, ClinicRoomService
+
         from dental_clinic.reporting import ReportingService
+        from dental_clinic.services import AppointmentService, ClinicRoomService
         with tempfile.TemporaryDirectory() as tmp:
             db = ClinicDatabase(Path(tmp) / 'test.db')
             db.initialize()
