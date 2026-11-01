@@ -4,10 +4,10 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import uuid4
 
-from .settings import ClinicSettings
 from .db import ClinicDatabase
 from .errors import ConflictError, NotFoundError, ValidationError
 from .services import _audit, _dt_dump, _patient_exists, _utc_now
+from .settings import ClinicSettings
 
 
 class FinanceService:

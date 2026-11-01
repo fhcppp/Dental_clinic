@@ -10,8 +10,8 @@ from dental_clinic import ClinicDatabase, PatientService
 from dental_clinic.clinical import ClinicalService, money_minor, validated_surfaces
 from dental_clinic.errors import ConflictError, ValidationError
 from dental_clinic.finance import FinanceService
-from dental_clinic.settings import ClinicSettings
 from dental_clinic.medical import MedicalService, age_on
+from dental_clinic.settings import ClinicSettings
 
 ACTOR = "synthetic-staff"
 
