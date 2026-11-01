@@ -1,29 +1,9 @@
-# Security posture — NOT PRODUCTION READY
+# Security status — NOT CLEARED FOR LIVE PATIENT RECORDS
 
-## Current safeguards
+**The SQLite database is plaintext.** There is no SQLCipher, Windows DPAPI key lifecycle, full-database encryption, secure admin recovery procedure or threat-reviewed packaging. Do not put real clinical data into this build.
 
-The implementation uses parameterized SQL statements, strong UUID4 record
-identifiers, `CHECK` constraints, enabled foreign keys, transactional writes,
-fixed state enumerations, and synthetic-only tests. Audit events contain
-operation metadata but no names or clinical notes. The application core does
-not perform network requests or emit record data to logs.
+Implemented primitives: Argon2id password hashing (`argon2-cffi`), random session tokens stored only as SHA-256 digests, session age and idle limits, initial administrator bootstrap, user deactivation, static role permissions, AES-256-GCM encrypted attachments, filename randomization, MIME magic checks, size limits, encrypted backups and hash-verified restore staging. These primitives are not yet universally enforced by the original `PatientService`, `AppointmentService`, `OdontogramService`, `MedicalService`, `ClinicalService` or `FinanceService`, whose `actor_id` arguments are caller-controlled. **Do not treat this as safe RBAC** until services derive identity from verified sessions.
 
-## Unresolved blockers for real patients
+Encrypted attachment keys are supplied externally and are not persisted by the vault. If lost, encrypted attachments cannot be decrypted. Secure Windows key generation, rotation, DPAPI wrapping, tamper evidence and recovery must be implemented and tested before production. The same AES key must never be committed to Git. Backups use scrypt-derived AES-256-GCM encryption from a passphrase supplied at use time, not remote storage.
 
-1. No login, identity binding, lockout, inactivity timeout or role-based
-   authorization; the `actor_id` argument is caller-controlled.
-2. SQLite contents, temporary/journal data and backups are **not encrypted**.
-   Encrypt at rest with a reviewed SQLCipher or equivalent design and
-   Windows-appropriate key protection; do not store a hard-coded master key.
-3. Audit rows are mutable by anyone with database access and have no integrity
-   protection, retention rule or verified actor identity.
-4. No signed software releases, authenticated update channel, malware
-   assessment, penetration test or independent clinical safety evaluation.
-5. No tested backup, recovery, destruction/retention or clinic privacy policy.
-
-**Do not enter any real names, medical histories, patient photographs,
-insurance numbers, imaging data or other patient information in this version.**
-
-No claim of HIPAA, GDPR, MDR or other regulatory compliance is made.
-Assessment of applicable laws and clinical-device classification requires
-qualified legal/clinical review in the deployment jurisdiction.
+All audit events store event metadata, not clinical details or passwords, but there is no tamper-evident chain. The local process and SQLite file owner can modify audit records. Manual backups do not replace an independently tested disaster-recovery plan.

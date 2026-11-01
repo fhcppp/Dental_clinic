@@ -1,30 +1,9 @@
-# Architecture
+# Architecture (as implemented)
 
-## Current boundaries
+Offline single-workstation Python 3.11+ services with local SQLite (`sqlite3`) and no HTTP API or mandatory online services. `ClinicDatabase` owns per-operation connections with foreign keys, serialized transactional writes and schema migrations. `services.py` retains the original patient, appointment, room and current-tooth-state services; `medical.py`, `clinical.py`, `finance.py`, `reporting.py`, `auth.py`, `attachments.py`, and `backup.py` add specialized operations.
 
-`ClinicDatabase` is the only persistence gateway. `PatientService`,
-`AppointmentService`, and `OdontogramService` encapsulate validation and SQL.
-`models.py` contains immutable read values and `fdi.py` holds tooth-number
-rules. There are no HTTP endpoints, cloud APIs, background syncing, desktop
-screens, or injectable secret credentials.
+The database is **not encrypted at rest**. Attachment contents and backup archives are independently encrypted with AES-256-GCM; attachment encryption keys are supplied by the caller and must not be hardcoded. No DPAPI or secure key lifecycle yet. Sessions, roles, and Argon2id password hashing are implemented as primitives; every clinical service still needs to be routed through a trusted authenticated application boundary. Do not enter real patient information.
 
-```
-Future PySide6 screens  [NOT IMPLEMENTED]
-        |
-Patient / Appointment / Odontogram services [IMPLEMENTED]
-        |
-ClinicDatabase -> file-backed SQLite [IMPLEMENTED]
-```
+The old SQLite v1 schema upgrades additively to v2 in one atomic migration system. Future schema changes must add new numbered migrations, not silently edit migrations already deployed. The requested SQLAlchemy 2.x layered architecture is **not yet implemented**. Avoid introducing a competing Alembic migration system without a carefully tested conversion plan.
 
-Calls are synchronous. Each business operation uses a fresh connection;
-write transactions start with `BEGIN IMMEDIATE`, serialize overlapping
-read-check-write transactions and roll back on error. UTC timestamps are
-stored as fixed-width ISO 8601 strings for consistent lexicographic ordering.
-The desktop's local timezone conversion belongs in the future interface.
-
-## Current limits
-
-The system has no authenticated user, access-control checks, encryption,
-content-addressed/tamper-resistant audit trail, treatment workflows, or
-Windows installer. It is an **engineering prototype only**, not an approved
-clinical system. These gaps block accepting real patient data.
+See `BACKEND_COMPLETION_REPORT.md` for details and limitations.

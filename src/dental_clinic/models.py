@@ -26,6 +26,7 @@ class Appointment:
     start_utc: datetime
     end_utc: datetime
     status: AppointmentStatus
+    room_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

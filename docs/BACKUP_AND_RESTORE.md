@@ -1,14 +1,7 @@
-# Backup and restore design — planned
+# Encrypted backup and restore — development-only
 
-There is **no implemented backup or restore feature**. Do not rely on copying
-a live SQLite `.sqlite3` file while writers may be active. The future backup
-service should use SQLite's online backup API for a consistent snapshot,
-then authenticated encryption with a managed key, tamper detection and
-rotation. Never upload backup files to GitHub.
+`BackupService(db, encrypted_attachment_directory).create(path, passphrase)` creates a consistent SQLite snapshot through SQLite's online backup mechanism, packages encrypted attachments and a SHA-256 manifest, then AES-256-GCM encrypts the archive with a key derived from the supplied passphrase via scrypt. Passwords should be long and stored securely outside the clinic application. No network is used.
 
-Future restore must verify authentication tags, schema version, snapshot
-integrity, available disk space and clinic identity before replacing data.
-Require an operator confirmation, maintain a known-good recovery snapshot and
-perform scheduled restoration drills in an isolated environment using
-synthetic records. Document recovery-point and recovery-time objectives with
-the clinic before deployment.
+`BackupService.verify(path, passphrase)` checks AEAD authentication, manifest hashes, schema version and SQLite integrity in a temporary directory. `BackupService.restore_to(path, passphrase, destination_db=new_db, destination_attachments=new_dir)` restores into **new, non-existing destinations** after verification. It deliberately refuses to overwrite the active clinic database. Do not attempt an in-place restore while the application is running.
+
+Current limitations: automatic schedules, retention, Windows DPAPI key handling, true atomic cutover of DB+attachments, backup-size scalability, and encrypted local database-at-rest remain unfinished. A failure during the two final filesystem moves may require manual review. Backups are limited to 128 MiB in this prototype; do not treat this as a production archive engine.

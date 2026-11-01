@@ -58,6 +58,7 @@ def _appointment(row: sqlite3.Row) -> Appointment:
         start_utc=_dt_load(row["start_utc"]),
         end_utc=_dt_load(row["end_utc"]),
         status=row["status"],
+        room_id=row["room_id"],
     )
 
 
@@ -91,15 +92,16 @@ def _check_conflict(
     start_utc: str,
     end_utc: str,
     excluding: str = "",
+    room_id: str | None = None,
 ) -> None:
     collision = conn.execute(
         """SELECT id FROM appointments
            WHERE status = 'scheduled'
              AND id != ?
              AND start_utc < ? AND end_utc > ?
-             AND (patient_id = ? OR practitioner_id = ?)
+             AND (patient_id = ? OR practitioner_id = ? OR (? IS NOT NULL AND room_id = ?))
            LIMIT 1""",
-        (excluding, end_utc, start_utc, patient_id, practitioner_id),
+        (excluding, end_utc, start_utc, patient_id, practitioner_id, room_id, room_id),
     ).fetchone()
     if collision:
         raise ConflictError("The patient or practitioner has an overlapping appointment")
@@ -194,6 +196,7 @@ class AppointmentService:
         end: datetime,
         *,
         actor_id: str = "system",
+        room_id: str | None = None,
     ) -> Appointment:
         if not isinstance(practitioner_id, str) or not (
             1 <= len(practitioner_id.strip()) <= 100
@@ -203,14 +206,19 @@ class AppointmentService:
         aid = str(uuid4())
         with self.db.transaction() as conn:
             _patient_exists(conn, patient_id)
+            if room_id is not None:
+                room = conn.execute("SELECT active FROM clinic_rooms WHERE id=?", (room_id,)).fetchone()
+                if not room or not room["active"]:
+                    raise ValidationError("Active treatment room required")
             _check_conflict(
-                conn, patient_id, practitioner_id.strip(), start_utc, end_utc
+                conn, patient_id, practitioner_id.strip(), start_utc, end_utc,
+                room_id=room_id,
             )
             conn.execute(
                 """INSERT INTO appointments
-                   (id, patient_id, practitioner_id, start_utc, end_utc, status)
-                   VALUES (?, ?, ?, ?, ?, 'scheduled')""",
-                (aid, patient_id, practitioner_id.strip(), start_utc, end_utc),
+                   (id, patient_id, practitioner_id, start_utc, end_utc, status, room_id)
+                   VALUES (?, ?, ?, ?, ?, 'scheduled', ?)""",
+                (aid, patient_id, practitioner_id.strip(), start_utc, end_utc, room_id),
             )
             _audit(conn, actor_id, "appointment.scheduled", "appointment", aid)
             row = conn.execute("SELECT * FROM appointments WHERE id = ?", (aid,)).fetchone()
@@ -270,6 +278,7 @@ class AppointmentService:
                 start_utc,
                 end_utc,
                 excluding=appointment_id,
+                room_id=row["room_id"],
             )
             conn.execute(
                 """UPDATE appointments SET start_utc = ?, end_utc = ?
@@ -318,6 +327,10 @@ class OdontogramService:
                    DO UPDATE SET state = excluded.state, updated_utc = excluded.updated_utc""",
                 (patient_id, code, state, updated_utc),
             )
+            conn.execute("""INSERT INTO tooth_state_events
+                           (id,patient_id,fdi_code,state,recorded_utc,actor_id)
+                           VALUES (?,?,?,?,?,?)""",
+                         (str(uuid4()), patient_id, code, state, updated_utc, actor_id))
             _audit(conn, actor_id, "tooth.state_set", "patient", patient_id)
         return ToothRecord(patient_id, code, state, _dt_load(updated_utc))
 
@@ -333,3 +346,18 @@ class OdontogramService:
                         _dt_load(row["updated_utc"]))
             for row in rows
         ]
+
+
+class ClinicRoomService:
+    """Local room directory for appointment conflict validation."""
+
+    def __init__(self, db: ClinicDatabase):
+        self.db = db
+
+    def add(self, room_id: str, display_name: str, *, actor_id: str = "system") -> None:
+        if not isinstance(room_id, str) or not room_id.strip() or not display_name.strip():
+            raise ValidationError("Room identifier and name required")
+        with self.db.transaction() as conn:
+            conn.execute("INSERT INTO clinic_rooms VALUES (?,?,1)",
+                         (room_id.strip(), display_name.strip()))
+            _audit(conn, actor_id, "room.created", "room", room_id)

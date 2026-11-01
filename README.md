@@ -1,78 +1,50 @@
-# Dental Clinic
+# Dental Clinic — offline Python backend (development)
 
-Offline-first dental practice desktop application **under development**. This
-repository currently contains a testable, standard-library Python backend
-foundation. It is **not production-ready** and must not be used with real
-patients or medical data.
+**Backend progress milestone v0.2.0, not production-ready.** Single-workstation dental clinic service library, designed for a future Windows PySide6 interface. **Do not use with real patient records.** The underlying SQLite database remains unencrypted and authorization is not integrated end to end.
 
-## Implemented features (backend only)
+## Implemented
 
-- Versioned, local SQLite schema; foreign keys; transactional writes.
-- Create, retrieve, list and deactivate patient directory entries.
-- Schedule, reschedule and cancel appointments, preventing overlaps for both
-  practitioner and patient; timezone-aware input normalized to UTC.
-- Validate FDI tooth numbers for 32 permanent and 20 primary teeth, and record
-  basic tooth state.
-- Metadata-only audit events associated with write operations (not tamper-proof).
-- Automated tests using synthetic fixtures and temporary SQLite databases.
+- SQLite schema versions 1→2, additive migration preserving existing records, foreign keys and transaction rollback.
+- Patient directory, archival, structured demographics, date-of-birth/approximate-age support, profile revisions and duplicate candidates.
+- Append-only medical conditions, allergies, medications and alerts.
+- FDI codes, validated individual tooth surfaces, append-only dental observations and tooth history.
+- Dentist records, treatment catalogue, clinical visits, restorative details, staged endodontic details, completed/amended treatment history and planned-versus-actual separation.
+- Timezone-aware appointment booking, practitioner/patient/room overlap protection.
+- Decimal-safe invoices, invoice line items, partial payments, refunds, outstanding balances and basic CSV reporting.
+- **Development security primitives only:** Argon2id credential hashing, local sessions and roles, AES-256-GCM encrypted attachments and passphrase-encrypted backup/verify/restore-to-new-location.
 
-## Technology stack & offline architecture
+## Technology / layout
 
-Python 3.11+, SQLite and the Python standard library. Operations access only
-local SQLite files; there are no network calls, cloud services, or telemetry.
-A Windows PySide6 UI, packaging and security layers are **planned, not shipped**.
-Development/CI uses GitHub, but the running backend requires no GitHub access.
+Python 3.11+, standard-library SQLite (`sqlite3`), argon2-cffi and cryptography. Services are under `src/dental_clinic/`; synthetic unit/integration/security tests are under `tests/`. No HTTP server, cloud database, online authentication, telemetry or frontend.
 
-## Development setup
+The mission requests SQLAlchemy 2.x and a fully layered architecture; these are **not yet implemented**. The existing raw SQLite persistence layer was retained to avoid unsafe schema replacement. See `docs/BACKEND_COMPLETION_REPORT.md` for the precise list of implemented and unfinished work.
+
+## Development
 
 ```bash
 python -m venv .venv
 # Windows: .venv\\Scripts\\activate
 # Linux/macOS: source .venv/bin/activate
-python -m pip install -e .
+python -m pip install -e '.[dev]'
 python -m unittest discover -s tests -v
+python -m pytest -q
+ruff check .
+mypy src/dental_clinic --ignore-missing-imports
 ```
 
-For optional lint/type checks: `python -m pip install -e '.[dev]'`, then
-`ruff check .` and `mypy src/dental_clinic --ignore-missing-imports`.
-For offline installation, provision Python and the build dependencies from a
-trusted local wheelhouse first; package installation is not automatically
-network-isolated.
+The backend itself runs without the internet after required dependencies are installed locally. For a completely offline installation, prepackage trusted dependencies in a wheelhouse.
 
-## Minimal API example (synthetic data only)
+## Minimal synthetic example
 
 ```python
 from datetime import UTC, datetime, timedelta
 from dental_clinic import ClinicDatabase, PatientService, AppointmentService
 
-db = ClinicDatabase("demo.sqlite3")
+db = ClinicDatabase('synthetic.sqlite3')
 db.initialize()
-p = PatientService(db).create("Synthetic Example")
+patient = PatientService(db).create('Synthetic Example')
 start = datetime(2026, 11, 3, 10, tzinfo=UTC)
-AppointmentService(db).schedule(p.id, "doctor-1", start, start + timedelta(minutes=30))
+AppointmentService(db).schedule(patient.id, 'dentist-1', start, start + timedelta(minutes=30))
 ```
 
-SQLite files and their backups are ignored by Git. Do not commit or publish
-patient data, secrets, real medical images, or production backups.
-
-## Project structure
-
-- `src/dental_clinic/`: database, models, FDI validation and services.
-- `tests/`: synthetic integration tests.
-- `docs/`: decisions, safety limitations, development and build roadmap.
-- `.github/workflows/`: CI (development-only).
-
-## Current status / next steps
-
-This is **v0.1 backend foundation**, not a released clinic product. Before any
-real patient data is accepted, add local authentication and role authorization,
-strong encryption at rest with secure local key custody, backup/restore, audit
-integrity, clinical validation, retention/erasure policy and threat-model
-verification. Remaining feature work includes treatment plans, financial
-modules, a PySide6 desktop interface, Windows packaging and installer tests.
-See [implementation report](docs/BACKEND_IMPLEMENTATION_REPORT.md).
-
-## License
-
-No open-source license has been selected or granted yet. Treat this repository
-as **all rights reserved** until the owner adds an explicit license.
+Never commit generated SQLite databases, logs, attachments, backups, credentials or real patient information. The source repository is for code and development history only. License: not selected yet; do not assume redistribution rights.

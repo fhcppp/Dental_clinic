@@ -39,12 +39,12 @@ class BackendIntegrationTests(unittest.TestCase):
         self.db.initialize()
         self.assertEqual(self.patients.get(self.alex.id).birth_date, date(1990, 5, 3))
         with self.db.read() as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
             self.assertEqual(conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
 
     def test_reject_newer_schema(self) -> None:
         with self.db.transaction() as conn:
-            conn.execute("PRAGMA user_version = 2")
+            conn.execute("PRAGMA user_version = 3")
         with self.assertRaises(RuntimeError):
             self.db.initialize()
 
