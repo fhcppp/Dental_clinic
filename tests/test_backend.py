@@ -17,7 +17,7 @@ from dental_clinic import (
     PatientService,
     ValidationError,
 )
-from dental_clinic.fdi import PRIMARY_CODES, PERMANENT_CODES, validate_fdi
+from dental_clinic.fdi import PERMANENT_CODES, PRIMARY_CODES, validate_fdi
 
 START = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
 HOUR = timedelta(hours=1)
