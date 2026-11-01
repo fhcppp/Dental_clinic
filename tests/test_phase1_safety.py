@@ -14,6 +14,8 @@ from dental_clinic import db as schema
 from dental_clinic.db import ClinicDatabase
 from dental_clinic.security.keys import (
     TestOnlyKeyProvider as DevelopmentKeyProvider,
+)
+from dental_clinic.security.keys import (
     WindowsDPAPIKeyProvider,
     generate_keyring,
     generate_master_key,
