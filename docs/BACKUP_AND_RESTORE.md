@@ -9,3 +9,11 @@ Current limitations: automatic schedules, retention, Windows DPAPI key handling,
 ## Migration snapshots are not encrypted clinical backups
 
 The migration-specific `.before-schema-*` files protect against schema transition failure in synthetic/test databases. They do **not** implement safe encrypted production backup, periodic scheduling, retention or staged activation. Never use this plaintext path with real patient data.
+
+## Schema v3 and remaining restore risk
+
+New backups carry schema version 3. This format does not yet support
+a production-ready encrypted SQLCipher database snapshot with protected keys.
+A restore still moves attachments and database in two separate operations;
+crash-consistent joint activation and retention automation are NOT DONE.
+The existing restore test uses disposable synthetic data only.

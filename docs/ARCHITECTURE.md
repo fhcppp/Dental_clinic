@@ -15,3 +15,12 @@ A standalone clinic settings object and `security/keys.py` isolate settings vali
 ### Recovered-code integration provenance
 
 This integration adds no competing migration system or new service rewrite. The verified upstream v1→v2 tree and the reconstructed baseline tree are byte-identical at the Git tree level. The Phase 1 additions and intentional test-only SQLite opt-in are catalogued in [`INTEGRATION_CHANGELOG.md`](INTEGRATION_CHANGELOG.md). Full persistence-layer separation and authenticated service authorization remain unfinished.
+
+## v3 audit/identity milestone (2026-11-01)
+
+Additive v3 schema retains v1/v2 IDs and adds an `audit_chain` row for each
+`audit_events` record and `auth_login_attempts`. Audit HMAC is registered
+per SQLite connection; the insert trigger is atomic with business writes.
+Startup verifies the retained chain. No anti-rollback anchor exists. This
+work does not create a production persistence provider or a service-wide
+trusted actor boundary. See ADR 0008 and PRODUCTION_READINESS.md.

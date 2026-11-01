@@ -18,3 +18,13 @@ All migrations are carried out transactionally by `ClinicDatabase.initialize()` 
 ## Migration preflight update
 
 Before upgrading an existing schema, the database now creates a transactionally consistent SQLite-online-backup snapshot with a unique `before-schema` suffix, verifies integrity and schema version, and then migrates via existing `PRAGMA user_version` and `BEGIN IMMEDIATE`. An injected invalid migration was tested to roll back with original version and patient identifier intact. Snapshots in the current explicit test-only mode are **plaintext** and must contain synthetic data only.
+
+## Schema v3 migration
+
+`PRAGMA user_version=3` adds `audit_chain(seq,event_id,previous_mac,mac,key_version)`
+and `auth_login_attempts(username_digest,failures,retry_utc,updated_utc)`.
+Historical audit IDs, patients and finances remain unchanged. The prior v2
+database is backed up before v3 migration in explicitly insecure synthetic
+mode. The migration and audit-chain backfill happen in one `BEGIN IMMEDIATE`
+transaction; failure rolls back to v2. Old test backups are plaintext and
+MUST NOT be used with patient data. Forward-only; no downgrade path.

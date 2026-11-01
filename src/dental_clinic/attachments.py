@@ -19,7 +19,7 @@ from .errors import NotFoundError, ValidationError
 from .services import _audit, _dt_dump, _patient_exists, _utc_now
 
 MAGIC = b"DENTALVAULT1"
-MAX_FILE_BYTES = 16 * 1024 * 1024
+MAX_FILE_BYTES = 25 * 1024 * 1024
 ALLOWED = {".pdf": ("application/pdf", b"%PDF-"),
            ".jpg": ("image/jpeg", b"\xff\xd8\xff"),
            ".jpeg": ("image/jpeg", b"\xff\xd8\xff"),
@@ -27,9 +27,15 @@ ALLOWED = {".pdf": ("application/pdf", b"%PDF-"),
 
 
 class AttachmentVault:
-    def __init__(self, db: ClinicDatabase, directory: str | Path, key: bytes):
+    def __init__(self, db: ClinicDatabase, directory: str | Path, key: bytes,
+                 *, max_file_bytes: int = MAX_FILE_BYTES):
         if not isinstance(key, bytes) or len(key) != 32:
             raise ValidationError("AES-256 key must contain 32 random bytes")
+        if type(max_file_bytes) is not int or not 1 <= max_file_bytes <= 1024 * 1024 * 1024:
+            raise ValidationError("Attachment size limit is invalid")
+        if Path(directory).is_symlink():
+            raise ValidationError("Attachment storage directory cannot be a symlink")
+        self.max_file_bytes = max_file_bytes
         self.db = db
         self.root = Path(directory).resolve()
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -37,8 +43,8 @@ class AttachmentVault:
 
     def store(self, patient_id: str, filename: str, payload: bytes, *, actor_id: str,
               visit_id: str | None = None, treatment_id: str | None = None) -> str:
-        if not isinstance(payload, bytes) or not 0 < len(payload) <= MAX_FILE_BYTES:
-            raise ValidationError("Attachment size must be 1-16 MiB")
+        if not isinstance(payload, bytes) or not 0 < len(payload) <= self.max_file_bytes:
+            raise ValidationError("Attachment exceeds the configured size limit")
         extension = Path(filename).suffix.lower()
         meta = ALLOWED.get(extension)
         if not meta or not payload.startswith(meta[1]):
@@ -50,9 +56,15 @@ class AttachmentVault:
         blob = MAGIC + nonce + self.cipher.encrypt(nonce, payload, associated)
         digest = hashlib.sha256(blob).hexdigest()
         path = self.root / basename
+        # Use an unpredictable temp name and durable rename, so database rows
+        # never reference half-written ciphertext after an interrupted write.
+        temporary = self.root / (secrets.token_hex(24) + ".pending")
         try:
-            with path.open("xb") as stream:
+            with temporary.open("xb") as stream:
                 stream.write(blob)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
             with self.db.transaction() as conn:
                 _patient_exists(conn, patient_id)
                 for table, record_id in (("clinical_visits", visit_id), ("treatments", treatment_id)):
@@ -68,6 +80,7 @@ class AttachmentVault:
                    meta[0], extension, len(blob), digest, _dt_dump(_utc_now())))
                 _audit(conn, actor_id, "attachment.created", "attachment", attachment_id)
         except BaseException:
+            temporary.unlink(missing_ok=True)
             path.unlink(missing_ok=True)
             raise
         return attachment_id

@@ -78,7 +78,7 @@ class SafeMigrationTests(unittest.TestCase):
         backups = list(self.path.parent.glob("*.before-schema-1-*.sqlite3"))
         self.assertEqual(len(backups), 1)
         with sqlite3.connect(self.path) as conn:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
             self.assertEqual(conn.execute("SELECT full_name FROM patients WHERE id='stable-id'").fetchone()[0],
                              "Synthetic Example")
         with sqlite3.connect(backups[0]) as conn:

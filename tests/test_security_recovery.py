@@ -101,6 +101,7 @@ class SecureInfrastructureTests(unittest.TestCase):
         service.restore_to(backup, "strong-synthetic-archive-password",
                            destination_db=database, destination_attachments=files)
         restored = ClinicDatabase(database, allow_insecure_plaintext_for_tests=True)
+        self.assertTrue(restored.verify_audit_chain())
         self.assertEqual(PatientService(restored).get(self.p.id).full_name,
                          "Synthetic Privacy Case")
         self.assertEqual(AttachmentVault(restored, files, self.key).load(self.p.id, att), original)

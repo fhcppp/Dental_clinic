@@ -15,3 +15,9 @@ synthetic-data usage example. Dependency installation may require internet
 unless you provision a trusted offline wheelhouse. Don't put project data in
 a cloud-synchronized folder. For real deployments, encryption, access control,
 installer signing and backup are mandatory prerequisites.
+
+## Clinical deployment restriction
+
+There is no production installation supported. `ClinicDatabase` intentionally
+rejects ordinary plaintext SQLite initialization. The explicit insecure test
+flag is only for synthetic developer fixtures.

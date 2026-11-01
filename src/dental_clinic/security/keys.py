@@ -18,7 +18,9 @@ from pathlib import Path
 from typing import Protocol
 
 from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 PURPOSES = ("database", "attachments", "backups")
 ENVELOPE_VERSION = 1
@@ -48,6 +50,20 @@ def _require_master(key: bytes) -> None:
 
 def generate_master_key() -> bytes:
     return secrets.token_bytes(32)
+
+
+def derive_audit_key(master_key: bytes, *, key_version: int = 1) -> bytes:
+    """Purpose-separated audit HMAC key, independent of other data keys.
+
+    The master key must be securely unlocked through a trusted key provider;
+    this derived key must never be stored in the SQLite database.
+    """
+    _require_master(master_key)
+    if not 1 <= key_version <= 65535:
+        raise ValueError("Invalid audit key version")
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=None,
+                info=f"dental-clinic/audit/hmac-sha256/v{key_version}".encode("ascii")
+               ).derive(master_key)
 
 
 def generate_keyring(master_key: bytes, *, key_version: int = 1) -> dict:

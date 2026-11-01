@@ -10,6 +10,7 @@ from dental_clinic import ClinicDatabase, PatientService
 from dental_clinic.clinical import ClinicalService, money_minor, validated_surfaces
 from dental_clinic.errors import ConflictError, ValidationError
 from dental_clinic.finance import FinanceService
+from dental_clinic.settings import ClinicSettings
 from dental_clinic.medical import MedicalService, age_on
 
 ACTOR = "synthetic-staff"
@@ -25,7 +26,8 @@ class ExpandedBackendTests(unittest.TestCase):
         self.other = PatientService(self.db).create("Synthetic Bob")
         self.medical = MedicalService(self.db)
         self.clinical = ClinicalService(self.db)
-        self.finance = FinanceService(self.db)
+        self.finance = FinanceService(
+            self.db, ClinicSettings(timezone="UTC", currency="EUR"))
         self.clinical.add_dentist("dentist-A", "Synthetic Dentist A", actor_id=ACTOR)
         self.clinical.add_dentist("dentist-B", "Synthetic Dentist B", actor_id=ACTOR)
         self.proc = self.clinical.add_procedure("Composite restoration", "Restorative", actor_id=ACTOR)
@@ -182,7 +184,7 @@ class ExpandedBackendTests(unittest.TestCase):
             old.initialize()
             self.assertEqual(MedicalService(old).profile("legacy")["full_name"], "Old Synthetic")
             with old.read() as c:
-                self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 2)
+                self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 3)
 
 
 if __name__ == "__main__":

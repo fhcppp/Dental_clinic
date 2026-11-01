@@ -19,3 +19,8 @@ clinical decisions.
 errors. SQLite failure may still raise `sqlite3.Error`. Before a clinic UI is
 built, specify patient-consent flows, safe deletion, clinical chart semantics,
 role-specific navigation, accessibility and language requirements.
+
+## Not for patient records
+
+Current code is a backend-only development prototype. No authorized,
+encrypted Windows clinical workflow is available yet.

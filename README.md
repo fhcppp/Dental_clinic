@@ -4,7 +4,7 @@
 
 ## Implemented
 
-- SQLite schema versions 1→2, additive migration preserving existing records, foreign keys and transaction rollback.
+- SQLite schema versions 1→2→3, additive migrations preserving existing records, foreign keys and transaction rollback.
 - Patient directory, archival, structured demographics, date-of-birth/approximate-age support, profile revisions and duplicate candidates.
 - Append-only medical conditions, allergies, medications and alerts.
 - FDI codes, validated individual tooth surfaces, append-only dental observations and tooth history.
@@ -54,3 +54,11 @@ Never commit generated SQLite databases, logs, attachments, backups, credentials
 Plaintext SQLite is now rejected on normal startup; explicit `allow_insecure_plaintext_for_tests=True` must only be used for synthetic tests. The live database is **NOT ENCRYPTED**. No real patients can be stored safely. `settings.ClinicSettings(timezone='Europe/Berlin', currency='EUR')` is an *example of explicit choices*, not a permanent region default. The clinic must choose its own timezone and currency; first-time setup persistence is not yet implemented.
 
 Versioned AES-256-GCM envelope keyrings provide separate random `database`, `attachments` and `backups` data keys; a portable scrypt-based recovery envelope can recover the master key using a user-supplied password. Windows DPAPI and SQLCipher compatibility remain unverified. Runtime integration, key rotation, and full authenticated authorization are still blockers. See `docs/adr/0005-*` through `0007-*`, `docs/windows_verification/`, and `docs/BACKEND_ACCEPTANCE_REPORT.md`.
+
+## 2026-11-01 production gate
+
+**NO-GO.** Local v3 audit-chain and bounded-login milestone is development-only.
+See [production readiness](docs/PRODUCTION_READINESS.md) and
+[acceptance report](docs/PRODUCTION_ACCEPTANCE_REPORT.md). The current
+synthetic suite passes 65 tests; Windows/SQLCipher and service-wide RBAC are
+not implemented. The frontend remains out of scope.

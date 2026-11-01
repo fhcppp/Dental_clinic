@@ -48,7 +48,7 @@ On the authoring environment, `PYTHONPATH=src python -m unittest discover -s tes
 
 1. **Unsafe for real patients.** Standard SQLite data is unencrypted at rest; SQLCipher on Windows and DPAPI-managed keys have not been implemented/tested.
 2. **Authorization not end-to-end.** Legacy service functions still accept arbitrary `actor_id`. The new auth service is a primitive, not a guard automatically applied to every clinical/financial service.
-3. **Audit limitations.** Audit records are metadata-only, but stored in modifiable local SQLite tables without tamper-evident signing; durable authenticated authorship is not established.
+3. **Audit limitations.** The original v2 audit table was not signed. The subsequent v3 addendum introduces keyed, transactional signing and verification, but production key protection, independent anti-rollback anchors and trusted actor identity remain incomplete.
 4. **Incomplete workflow and integrity gates.** No full room/working-hours availability calendar, no robust plan-item transition history, no centralized amendment approval, and no full cross-entity authorization policy. Some domain invariants are enforced in Python rather than SQLite triggers.
 5. **Clinical details.** Endodontic stages and restoration details do not yet cover every specified field and longitudinal treatment case, and visit notes are not separately versioned.
 6. **Backup scheduling and recovery.** Manual encrypted backup and restore-to-new-path are implemented. Automatic backup scheduling, safe live database switchover, retention policy and recovery from partial directory moves are not implemented.
@@ -60,3 +60,10 @@ The backend-completion gate must remain **not passed** until these blockers and 
 ## Remote integration provenance — 2026-11-01
 
 The recovered Phase 1 changes were compared with the actual upstream source using Git tree identity, not presumed Git ancestry. See [`INTEGRATION_CHANGELOG.md`](INTEGRATION_CHANGELOG.md). Local integration verification: Python 3.13.5; 50 unittest tests passing, 50 pytest tests passing (plus 9 subtests), compilation and Git whitespace checks passing. Local Ruff/mypy and real Windows/DPAPI/SQLCipher checks were not performed. Backend completion remains **NOT PASSED**.
+
+## Subsequent local development milestone (2026-11-01)
+
+Schema v3 audit chain and login throttling added in a separate local source
+workspace: 65/65 unittest, 65/65 pytest, compilation passing. Production gate
+remains NO-GO; see PRODUCTION_ACCEPTANCE_REPORT.md for exact test evidence
+and outstanding security requirements. No new GitHub CI evidence is implied.

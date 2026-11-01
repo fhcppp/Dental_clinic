@@ -4,20 +4,35 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import uuid4
 
-from .clinical import money_minor
+from .settings import ClinicSettings
 from .db import ClinicDatabase
 from .errors import ConflictError, NotFoundError, ValidationError
 from .services import _audit, _dt_dump, _patient_exists, _utc_now
 
 
 class FinanceService:
-    def __init__(self, db: ClinicDatabase):
+    def __init__(self, db: ClinicDatabase, settings: ClinicSettings | None = None):
         self.db = db
+        self.settings = settings
 
-    def create_invoice(self, patient_id: str, *, actor_id: str, currency: str = "EUR") -> str:
-        if (not isinstance(currency, str) or len(currency) != 3
-            or not currency.isascii() or not currency.isalpha()):
-            raise ValidationError("Currency must be an ISO-style three-letter code")
+    def _amount(self, amount: Decimal | str) -> int:
+        if self.settings is None:
+            raise ValidationError("Clinic timezone and currency must be configured first")
+        try:
+            value = self.settings.to_minor_units(amount)
+        except ValueError as exc:
+            raise ValidationError("Invalid amount for configured currency") from exc
+        if value > 9_000_000_000_000_000:
+            raise ValidationError("Amount exceeds supported range")
+        return value
+
+    def create_invoice(self, patient_id: str, *, actor_id: str, currency: str | None = None) -> str:
+        if self.settings is None:
+            raise ValidationError("Explicit clinic timezone and currency configuration required")
+        selected_currency = self.settings.currency
+        if currency is not None and currency != selected_currency:
+            raise ValidationError("Invoice currency must match configured clinic currency")
+        currency = selected_currency
         invoice_id = str(uuid4())
         with self.db.transaction() as conn:
             _patient_exists(conn, patient_id)
@@ -32,7 +47,9 @@ class FinanceService:
             raise ValidationError("Quantity must be a positive integer")
         if not isinstance(description, str) or not description.strip():
             raise ValidationError("Item description is required")
-        unit_minor = money_minor(amount)
+        unit_minor = self._amount(amount)
+        if unit_minor * quantity > 9_000_000_000_000_000:
+            raise ValidationError("Invoice line total exceeds supported range")
         item_id = str(uuid4())
         with self.db.transaction() as conn:
             inv = conn.execute("SELECT patient_id,status FROM invoices WHERE id = ?",
@@ -46,6 +63,12 @@ class FinanceService:
                                   (treatment_id,)).fetchone()
                 if not tx or tx["patient_id"] != inv["patient_id"] or tx["status"] != "completed":
                     raise ValidationError("Invoice treatment must be completed for same patient")
+            current_total = conn.execute(
+                "SELECT COALESCE(SUM(quantity * unit_minor),0) FROM invoice_items WHERE invoice_id=?",
+                (invoice_id,),
+            ).fetchone()[0]
+            if current_total + unit_minor * quantity > 9_000_000_000_000_000:
+                raise ValidationError("Invoice total exceeds supported range")
             conn.execute("INSERT INTO invoice_items VALUES (?,?,?,?,?,?)",
                          (item_id, invoice_id, description.strip(), quantity, unit_minor, treatment_id))
             _audit(conn, actor_id, "invoice.item_added", "invoice", invoice_id)
@@ -80,7 +103,7 @@ class FinanceService:
 
     def record_payment(self, invoice_id: str, amount: Decimal | str, *,
                        actor_id: str, method: str = "other") -> str:
-        cents = money_minor(amount)
+        cents = self._amount(amount)
         if cents <= 0:
             raise ValidationError("Payment must be positive")
         payment_id = str(uuid4())
@@ -104,7 +127,7 @@ class FinanceService:
         return payment_id
 
     def refund(self, original_payment_id: str, amount: Decimal | str, *, actor_id: str) -> str:
-        cents = money_minor(amount)
+        cents = self._amount(amount)
         if cents <= 0:
             raise ValidationError("Refund must be positive")
         refund_id = str(uuid4())

@@ -13,3 +13,8 @@
 `v0.1.0` in project metadata describes an internal prototype milestone, **not**
 a production release. No stable Git tag, installer or public GitHub release is
 created as part of this work.
+
+## Production release gate
+
+Do not tag, release or merge based solely on passing Linux tests. The critical
+requirements listed in PRODUCTION_READINESS.md must be closed and verified.

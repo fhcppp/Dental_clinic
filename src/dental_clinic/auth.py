@@ -18,6 +18,11 @@ from .errors import ConflictError, ValidationError
 from .services import _audit, _dt_dump, _dt_load, _utc_now
 
 PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2, type=Type.ID)
+# Avoid revealing whether an attempted username exists through different
+# password-hash work; generated at application startup, never a real account.
+_DUMMY_PASSWORD_HASH = PASSWORD_HASHER.hash("not-a-real-clinic-account-password")
+LOGIN_FAILURE_THRESHOLD = 5
+MAX_LOGIN_DELAY_SECONDS = 15 * 60
 PERMISSIONS = {
     "administrator": {"users.manage", "patients.read", "patients.write", "clinical.write",
                       "billing.write", "backups.manage"},
@@ -57,24 +62,73 @@ class AuthService:
         return uid
 
     def login(self, username: str, password: str) -> str:
-        if not isinstance(username, str) or not isinstance(password, str):
-            raise ValidationError("Invalid username or password")
-        with self.db.read() as conn:
-            row = conn.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE AND active=1",
-                               (username,)).fetchone()
-        if row is None:
-            raise ValidationError("Invalid username or password")
-        try:
-            PASSWORD_HASHER.verify(row["password_hash"], password)
-        except (VerificationError, InvalidHashError) as exc:
-            raise ValidationError("Invalid username or password") from exc
-        token = secrets.token_urlsafe(48)
+        """Authenticate with bounded inputs, shared errors and progressive delays.
+
+        Failed attempts are committed along with their audit events before an
+        error is returned. All concurrent attempts use BEGIN IMMEDIATE.
+        """
+        generic = "Invalid username or password"
+        if (not isinstance(username, str) or not isinstance(password, str)
+            or not 1 <= len(username.strip()) <= 128 or len(password) > 1024):
+            raise ValidationError(generic)
+        username = username.strip()
+        fingerprint = hashlib.sha256(username.casefold().encode("utf-8")).hexdigest()
         now = _utc_now()
+        token: str | None = None
         with self.db.transaction() as conn:
-            conn.execute("INSERT INTO local_sessions VALUES (?,?,?,?,0)",
-                         (_hash_token(token), row["id"], _dt_dump(now+SESSION_TTL),
-                          _dt_dump(now)))
-            _audit(conn, row["id"], "session.started", "user", row["id"])
+            row = conn.execute(
+                "SELECT * FROM users WHERE username=? COLLATE NOCASE AND active=1",
+                (username,),
+            ).fetchone()
+            attempt = conn.execute(
+                "SELECT failures,retry_utc FROM auth_login_attempts WHERE username_digest=?",
+                (fingerprint,),
+            ).fetchone()
+            blocked = bool(attempt is not None and attempt["retry_utc"]
+                           and _dt_load(attempt["retry_utc"]) > now)
+            if not blocked:
+                try:
+                    PASSWORD_HASHER.verify(
+                        row["password_hash"] if row is not None else _DUMMY_PASSWORD_HASH,
+                        password,
+                    )
+                    valid = row is not None
+                except (VerificationError, InvalidHashError):
+                    valid = False
+                if valid:
+                    conn.execute(
+                        "DELETE FROM auth_login_attempts WHERE username_digest=?",
+                        (fingerprint,),
+                    )
+                    token = secrets.token_urlsafe(48)
+                    conn.execute(
+                        "INSERT INTO local_sessions VALUES (?,?,?,?,0)",
+                        (_hash_token(token), row["id"], _dt_dump(now + SESSION_TTL),
+                         _dt_dump(now)),
+                    )
+                    _audit(conn, row["id"], "session.started", "user", row["id"])
+                else:
+                    failures = int(attempt["failures"]) + 1 if attempt else 1
+                    # Five failures trigger 15 seconds, then 30, 60, ... up
+                    # to 15 minutes. No permanent lockout: prevents trivial
+                    # denial of service by permanently disabling an account.
+                    delay = (min(MAX_LOGIN_DELAY_SECONDS,
+                                 15 * 2 ** min(failures - LOGIN_FAILURE_THRESHOLD, 6))
+                             if failures >= LOGIN_FAILURE_THRESHOLD else 0)
+                    retry = _dt_dump(now + timedelta(seconds=delay)) if delay else None
+                    conn.execute(
+                        """INSERT INTO auth_login_attempts
+                           (username_digest,failures,retry_utc,updated_utc)
+                           VALUES (?,?,?,?) ON CONFLICT(username_digest) DO UPDATE SET
+                           failures=excluded.failures,retry_utc=excluded.retry_utc,
+                           updated_utc=excluded.updated_utc""",
+                        (fingerprint, failures, retry, _dt_dump(now)),
+                    )
+                    _audit(conn, "unauthenticated", "auth.login_failed", "login", fingerprint)
+            else:
+                _audit(conn, "unauthenticated", "auth.login_delayed", "login", fingerprint)
+        if token is None:
+            raise ValidationError(generic)
         return token
 
     def authorize(self, token: str, permission: str) -> str:

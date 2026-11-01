@@ -12,7 +12,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
-SCHEMA_VERSION = 2
+from .audit import INSECURE_TEST_AUDIT_KEY, backfill_chain, event_mac, verify_chain
+
+SCHEMA_VERSION = 3
 SCHEMA_V1 = (
     """CREATE TABLE patients (
         id TEXT PRIMARY KEY,
@@ -284,10 +286,57 @@ SCHEMA_V2 = (
     "CREATE INDEX idx_invoice_patient_date ON invoices(patient_id, issued_utc)",
 )
 
+
+# v3 preserves the original audit table and historical event IDs. The audit
+# chain is keyed and append-only; every new audit insertion triggers an atomic
+# signature calculation through the connection-specific Python HMAC function.
+SCHEMA_V3 = (
+    """CREATE TABLE audit_chain (
+        seq INTEGER PRIMARY KEY CHECK(seq > 0),
+        event_id INTEGER NOT NULL UNIQUE REFERENCES audit_events(id) ON DELETE RESTRICT,
+        previous_mac TEXT NOT NULL CHECK(length(previous_mac) = 64),
+        mac TEXT NOT NULL CHECK(length(mac) = 64),
+        key_version INTEGER NOT NULL CHECK(key_version = 1)
+    )""",
+    """CREATE TABLE auth_login_attempts (
+        username_digest TEXT PRIMARY KEY CHECK(length(username_digest) = 64),
+        failures INTEGER NOT NULL DEFAULT 0 CHECK(failures >= 0),
+        retry_utc TEXT,
+        updated_utc TEXT NOT NULL
+    )""",
+)
+
+AUDIT_TRIGGERS_V3 = (
+    """CREATE TRIGGER append_audit_chain AFTER INSERT ON audit_events BEGIN
+        INSERT INTO audit_chain(seq,event_id,previous_mac,mac,key_version)
+        VALUES (
+            (SELECT COALESCE(MAX(seq),0)+1 FROM audit_chain), NEW.id,
+            COALESCE((SELECT mac FROM audit_chain ORDER BY seq DESC LIMIT 1),
+                     '0000000000000000000000000000000000000000000000000000000000000000'),
+            dental_audit_mac(
+                (SELECT COALESCE(MAX(seq),0)+1 FROM audit_chain), NEW.id,
+                NEW.occurred_utc, NEW.actor_id, NEW.action, NEW.subject_type,
+                NEW.subject_id,
+                COALESCE((SELECT mac FROM audit_chain ORDER BY seq DESC LIMIT 1),
+                         '0000000000000000000000000000000000000000000000000000000000000000')
+            ), 1
+        );
+    END""",
+    """CREATE TRIGGER protect_audit_events_update BEFORE UPDATE ON audit_events
+        BEGIN SELECT RAISE(ABORT, 'audit events are immutable'); END""",
+    """CREATE TRIGGER protect_audit_events_delete BEFORE DELETE ON audit_events
+        BEGIN SELECT RAISE(ABORT, 'audit events are immutable'); END""",
+    """CREATE TRIGGER protect_audit_chain_update BEFORE UPDATE ON audit_chain
+        BEGIN SELECT RAISE(ABORT, 'audit chain is immutable'); END""",
+    """CREATE TRIGGER protect_audit_chain_delete BEFORE DELETE ON audit_chain
+        BEGIN SELECT RAISE(ABORT, 'audit chain is immutable'); END""",
+)
+
 class ClinicDatabase:
     """Open one SQLite connection per operation, safe for multi-threaded callers."""
 
-    def __init__(self, path: str | Path, *, allow_insecure_plaintext_for_tests: bool = False):
+    def __init__(self, path: str | Path, *, allow_insecure_plaintext_for_tests: bool = False,
+                 audit_key: bytes | None = None):
         """Fail closed unless plaintext storage is explicitly enabled for tests.
 
         A production-ready SQLCipher backend is not implemented. This safeguard
@@ -295,6 +344,12 @@ class ClinicDatabase:
         """
         self.path = str(path)
         self.allow_insecure_plaintext_for_tests = allow_insecure_plaintext_for_tests
+        if audit_key is not None and (not isinstance(audit_key, bytes) or len(audit_key) != 32):
+            raise ValueError("Audit integrity key must be 32 bytes")
+        # A deterministic signing key is acceptable ONLY in the explicit
+        # synthetic-data mode; production must use independently protected keys.
+        self.audit_key = audit_key or (INSECURE_TEST_AUDIT_KEY if
+                                       allow_insecure_plaintext_for_tests else None)
 
     def _require_safe_mode(self) -> None:
         if not self.allow_insecure_plaintext_for_tests:
@@ -339,6 +394,12 @@ class ClinicDatabase:
         self._require_safe_mode()
         conn = sqlite3.connect(self.path, timeout=5, isolation_level=None)
         conn.row_factory = sqlite3.Row
+        if self.audit_key is None:
+            conn.close()
+            raise RuntimeError("Audit integrity key is unavailable")
+        audit_key = self.audit_key
+        conn.create_function("dental_audit_mac", 8,
+                             lambda *args: event_mac(audit_key, *args))
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA busy_timeout = 5000")
         return conn
@@ -361,6 +422,24 @@ class ClinicDatabase:
                 for statement in SCHEMA_V2:
                     conn.execute(statement)
                 conn.execute("PRAGMA user_version = 2")
+                version = 2
+            if version == 2:
+                for statement in SCHEMA_V3:
+                    conn.execute(statement)
+                assert self.audit_key is not None
+                backfill_chain(conn, self.audit_key)
+                for statement in AUDIT_TRIGGERS_V3:
+                    conn.execute(statement)
+                conn.execute("PRAGMA user_version = 3")
+        # A damaged/mismatched keyed chain must prevent routine startup.
+        # This is not a substitute for a trusted external anti-rollback anchor.
+        if not self.verify_audit_chain():
+            raise RuntimeError("Audit integrity verification failed; refuse to start")
+
+    def verify_audit_chain(self) -> bool:
+        with self.read() as conn:
+            assert self.audit_key is not None
+            return verify_chain(conn, self.audit_key)
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
