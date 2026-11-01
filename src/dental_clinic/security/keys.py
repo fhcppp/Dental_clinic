@@ -8,6 +8,7 @@ is a separate requirement and opening plaintext production databases is denied.
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import importlib
 import json
@@ -33,7 +34,7 @@ def _decode(data: str, expected: int | None = None) -> bytes:
         raise ValueError("Invalid envelope field")
     try:
         value = base64.b64decode(data, validate=True)
-    except (ValueError, base64.binascii.Error) as exc:
+    except (ValueError, binascii.Error) as exc:
         raise ValueError("Invalid envelope encoding") from exc
     if expected is not None and len(value) != expected:
         raise ValueError("Invalid envelope field size")
