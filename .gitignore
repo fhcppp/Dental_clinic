@@ -1,0 +1,42 @@
+# Python and test caches
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+env/
+# IDE
+.idea/
+.vscode/
+# Sensitive local data
+/data/
+/database/
+*.db
+*.sqlite
+*.sqlite3
+/patient_data/
+/patient_images/
+/medical_documents/
+/attachments/
+/backups/
+*.backup
+*.bak
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+/secrets/
+/credentials/
+/logs/
+*.log
+# Build & Windows temporary artifacts
+/build/
+/dist/
+*.spec.bak
+Thumbs.db
+Desktop.ini
